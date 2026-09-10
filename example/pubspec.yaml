@@ -1,0 +1,21 @@
+name: flag_override_panel_example
+description: "Demonstrates flag_override_panel driving a small app's UI."
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flag_override_panel:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

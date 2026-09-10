@@ -1,0 +1,27 @@
+name: flag_override_panel
+description: >-
+  A debug-only panel for viewing and overriding feature flags on-device during
+  development and QA, independent of your remote flag provider.
+version: 0.1.0
+repository: https://github.com/YOUR_GITHUB_USERNAME/flag_override_panel
+issue_tracker: https://github.com/YOUR_GITHUB_USERNAME/flag_override_panel/issues
+
+topics:
+  - feature-flags
+  - debugging
+  - devtools
+  - testing
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0

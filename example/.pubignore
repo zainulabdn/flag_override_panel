@@ -1,0 +1,10 @@
+# Keep the published archive small: the example's platform scaffolding lives in
+# the repo (so `flutter run` works there) but adds nothing on pub.dev.
+android/
+ios/
+web/
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
