@@ -3,8 +3,8 @@ description: >-
   A debug-only panel for viewing and overriding feature flags on-device during
   development and QA, independent of your remote flag provider.
 version: 0.1.0
-repository: https://github.com/YOUR_GITHUB_USERNAME/flag_override_panel
-issue_tracker: https://github.com/YOUR_GITHUB_USERNAME/flag_override_panel/issues
+repository: https://github.com/zainulabdn/flag_override_panel
+issue_tracker: https://github.com/zainulabdn/flag_override_panel/issues
 
 topics:
   - feature-flags
