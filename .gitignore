@@ -26,6 +26,10 @@ migrate_working_dir/
 /pubspec.lock
 **/doc/api/
 .dart_tool/
+
+# Intermediate frames written by example/tool/capture_test.dart. The finished
+# images in doc/ are committed; the ~30MB of frames behind them are not.
+/doc/.frames/
 .flutter-plugins-dependencies
 /build/
 /coverage/

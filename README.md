@@ -8,6 +8,8 @@ a switch next to each one, and a reset button. This is that drawer, as a package
 replace Firebase Remote Config, LaunchDarkly or your own backend — it sits in front of them so QA
 can force a flag on without waiting for a config to propagate.
 
+![The override panel beside the app it drives](doc/showcase.png)
+
 ## Why
 
 - **Force any flag from inside the app.** No backend change, no new build, no propagation delay.
@@ -16,6 +18,11 @@ can force a flag on without waiting for a config to propagate.
 - **Safe by default.** Overrides only apply when `FlagManager.enabled` is true, which defaults to
   `kDebugMode`. A forgotten override cannot change behaviour in a release build.
 - **Provider agnostic.** One closure connects it to whatever you already use.
+
+![Toggling flags in the panel while the app updates live](doc/demo.gif)
+
+Every change above is made from inside the running app. Nothing was rebuilt, redeployed, or
+waited on — and one tap on **Reset all** puts it back.
 
 ## Install
 
@@ -98,6 +105,12 @@ IconButton(
 Wire it to a debug menu, a shake gesture, or an internal-only build. `FlagOverridePanel` is a
 plain widget, so you can also drop it into a `Scaffold` body as a full screen.
 
+![Every registered flag grouped by section](doc/panel.png)
+
+Flags are grouped by `group`, filterable by key, description or group, and each override shows
+the value it reverts to. A `bool` renders as a switch, a `String` with `options` as a dropdown,
+and `int`/`double` as numeric fields.
+
 ## How a value is resolved
 
 For each flag, in order:
@@ -115,8 +128,11 @@ A value that does not parse is skipped rather than thrown — a remote returning
 ## Release builds
 
 `enabled` defaults to `kDebugMode`. In a release build overrides are still stored and listed, but
-`source` wins, and the panel shows a banner saying so. If you ship an internal or QA flavour where
-overrides *should* apply, pass it explicitly:
+`source` wins, and the panel shows a banner saying so.
+
+![The panel in a build where overrides are disabled](doc/release_build.png)
+
+If you ship an internal or QA flavour where overrides *should* apply, pass it explicitly:
 
 ```dart
 FlagManager.init(flags: appFlags, enabled: isInternalBuild);
@@ -157,6 +173,15 @@ you know which flags were on when something broke.
 
 A runnable app is in [`example/`](example), where the flags drive the theme, the list length and
 the card styling so you can watch the UI change as you toggle them.
+
+The images above are generated from that example rather than captured by hand, so they cannot
+drift from what the package actually renders:
+
+```sh
+cd example
+flutter test tool/capture_test.dart   # writes doc/*.png and the animation frames
+./tool/make_media.sh                  # stitches doc/demo.gif, needs ffmpeg
+```
 
 ## License
 

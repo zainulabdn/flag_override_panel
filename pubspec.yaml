@@ -2,7 +2,7 @@ name: flag_override_panel
 description: >-
   A debug-only panel for viewing and overriding feature flags on-device during
   development and QA, independent of your remote flag provider.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/zainulabdn/flag_override_panel
 issue_tracker: https://github.com/zainulabdn/flag_override_panel/issues
 
@@ -11,6 +11,22 @@ topics:
   - debugging
   - devtools
   - testing
+
+screenshots:
+  - description: >-
+      The override panel beside the app it drives: flipping a flag on the right
+      changes the screen on the left immediately.
+    path: doc/showcase.png
+  - description: >-
+      Toggling flags in the panel and resetting them, with the app updating live.
+    path: doc/demo.gif
+  - description: >-
+      Every registered flag grouped by section, showing the value in effect and
+      what it reverts to once the override is cleared.
+    path: doc/panel.png
+  - description: >-
+      In a release build overrides are stored but inert, and the panel says so.
+    path: doc/release_build.png
 
 environment:
   sdk: ^3.6.0

@@ -1,3 +1,11 @@
+## 0.1.1
+
+- Add screenshots and an animated demo to the README and to pub.dev. They are
+  rendered from the example app by `example/tool/capture_test.dart`, so they
+  stay in step with what the package actually draws.
+
+No API changes.
+
 ## 0.1.0
 
 Initial release.
