@@ -28,7 +28,7 @@ waited on — and one tap on **Reset all** puts it back.
 
 ```yaml
 dependencies:
-  flag_override_panel: ^0.1.0
+  flag_override_panel: ^0.2.0
 ```
 
 ## Usage
@@ -153,6 +153,42 @@ abstract interface class FlagOverrideStore {
 ```
 
 `MemoryFlagOverrideStore` is the default and is what you want in tests.
+
+## Sharing overrides
+
+The panel's ⋮ menu copies the current overrides to the clipboard as JSON, and pastes a payload
+back. A tester drops theirs into a bug report; whoever picks it up pastes it in and lands on the
+same state.
+
+```json
+{
+  "new_checkout": true,
+  "page_size": 5
+}
+```
+
+Only flags someone deliberately changed appear, so importing reproduces the overrides without
+pinning everything else to whatever the other device happened to resolve. Both ends work without
+the UI:
+
+```dart
+final String payload = manager.exportOverrides();
+
+final FlagImportResult result = await manager.importOverrides(payload);
+print(result.describe()); // Imported 2 overrides, 1 unknown
+```
+
+`importOverrides` **replaces** the override set rather than merging it, because reproducing
+someone's state means ending up with exactly their flags and no others. An empty object therefore
+clears everything.
+
+Keys no flag declares, and values that do not parse to their flag's type, are skipped and reported
+in `FlagImportResult` instead of failing the import — a payload written against an older build of
+the app still applies everything it legitimately can. Values are stored parsed, so `"true"` for a
+`BoolFlag` lands as `true` and exported payloads are canonical.
+
+For the other direction — every flag and the value actually in effect, rather than just the
+overridden ones — use `snapshot()`.
 
 ## Testing with flags
 

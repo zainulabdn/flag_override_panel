@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flag_override_panel/flag_override_panel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const BoolFlag newCheckout = BoolFlag(
@@ -224,6 +227,142 @@ void main() {
         const MaterialApp(home: Scaffold(body: FlagOverridePanel())),
       );
       expect(find.byKey(const Key('flag_override_panel.tile.page_size')),
+          findsOneWidget);
+    });
+  });
+
+  group('copy and paste overrides', () {
+    setUp(() {
+      // Intercept the platform clipboard so the test owns both ends.
+      final Map<String, Object?> clipboard = <String, Object?>{};
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform,
+              (MethodCall call) async {
+        switch (call.method) {
+          case 'Clipboard.setData':
+            clipboard['text'] = (call.arguments as Map<Object?, Object?>)['text'];
+            return null;
+          case 'Clipboard.getData':
+            return clipboard.isEmpty ? null : <String, Object?>{...clipboard};
+          default:
+            return null;
+        }
+      });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+    });
+
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('copy puts the overrides on the clipboard',
+        (WidgetTester tester) async {
+      final FlagManager manager = buildManager();
+      await manager.setOverride(newCheckout, true);
+      await manager.setOverride(pageSize, 5);
+      await tester.pumpWidget(wrap(manager));
+
+      await openMenu(tester);
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu.copy')));
+      await tester.pumpAndSettle();
+
+      final ClipboardData? clip = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(jsonDecode(clip!.text!),
+          <String, Object>{'new_checkout': true, 'page_size': 5});
+      expect(find.text('Copied 2 overrides'), findsOneWidget);
+    });
+
+    testWidgets('copy is disabled when nothing is overridden',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(wrap(buildManager()));
+      await openMenu(tester);
+
+      final PopupMenuItem<Object?> item = tester.widget<PopupMenuItem<Object?>>(
+        find.byKey(const Key('flag_override_panel.menu.copy')),
+      );
+      expect(item.enabled, isFalse);
+    });
+
+    testWidgets('paste opens prefilled from the clipboard and applies it',
+        (WidgetTester tester) async {
+      await Clipboard.setData(
+          const ClipboardData(text: '{"page_size": 42, "theme": "dark"}'));
+      final FlagManager manager = buildManager();
+      await tester.pumpWidget(wrap(manager));
+
+      await openMenu(tester);
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu.paste')));
+      await tester.pumpAndSettle();
+
+      final TextField field = tester.widget<TextField>(
+        find.byKey(const Key('flag_override_panel.import_field')),
+      );
+      expect(field.controller?.text, '{"page_size": 42, "theme": "dark"}');
+
+      await tester
+          .tap(find.byKey(const Key('flag_override_panel.import_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(manager.valueOf(pageSize), 42);
+      expect(manager.valueOf(theme), 'dark');
+      expect(find.text('Imported 2 overrides'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the paste dialog changes nothing',
+        (WidgetTester tester) async {
+      await Clipboard.setData(const ClipboardData(text: '{"page_size": 42}'));
+      final FlagManager manager = buildManager();
+      await tester.pumpWidget(wrap(manager));
+
+      await openMenu(tester);
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu.paste')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(manager.hasOverrides, isFalse);
+    });
+
+    testWidgets('a bad payload reports instead of throwing',
+        (WidgetTester tester) async {
+      await Clipboard.setData(const ClipboardData(text: 'nonsense'));
+      final FlagManager manager = buildManager();
+      await tester.pumpWidget(wrap(manager));
+
+      await openMenu(tester);
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu.paste')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('flag_override_panel.import_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(manager.hasOverrides, isFalse);
+      expect(find.textContaining('not a JSON object'), findsOneWidget);
+    });
+
+    testWidgets('the panel redraws to match an imported set',
+        (WidgetTester tester) async {
+      await Clipboard.setData(const ClipboardData(text: '{"new_checkout": true}'));
+      final FlagManager manager = buildManager();
+      await tester.pumpWidget(wrap(manager));
+      expect(find.byKey(const Key('flag_override_panel.reset.new_checkout')),
+          findsNothing);
+
+      await openMenu(tester);
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu.paste')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('flag_override_panel.import_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('flag_override_panel.reset.new_checkout')),
+          findsOneWidget);
+      expect(find.byKey(const Key('flag_override_panel.reset_all')),
           findsOneWidget);
     });
   });

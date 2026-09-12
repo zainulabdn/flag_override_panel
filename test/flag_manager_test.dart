@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flag_override_panel/flag_override_panel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -212,6 +214,132 @@ void main() {
       await manager.setOverride(newCheckout, true);
       await manager.clearOverride(newCheckout);
       expect(notifications, 2);
+    });
+  });
+
+  group('export and import', () {
+    test('exports only the flags that were overridden', () async {
+      final FlagManager manager = FlagManager(
+        flags: allFlags,
+        enabled: true,
+        source: (String key) => key == 'page_size' ? 50 : null,
+      );
+      expect(jsonDecode(manager.exportOverrides()), isEmpty);
+
+      await manager.setOverride(newCheckout, true);
+      expect(
+        jsonDecode(manager.exportOverrides()),
+        <String, Object>{'new_checkout': true},
+        reason: 'page_size resolves from the source, it was not overridden',
+      );
+    });
+
+    test('round-trips through a second manager', () async {
+      final FlagManager first = FlagManager(flags: allFlags, enabled: true);
+      await first.setOverride(newCheckout, true);
+      await first.setOverride(pageSize, 7);
+      await first.setOverride(theme, 'dark');
+
+      final FlagManager second = FlagManager(flags: allFlags, enabled: true);
+      final FlagImportResult result =
+          await second.importOverrides(first.exportOverrides());
+
+      expect(result.applied, 3);
+      expect(result.hasProblems, isFalse);
+      expect(second.snapshot(), first.snapshot());
+    });
+
+    test('replaces rather than merges', () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      await manager.setOverride(newCheckout, true);
+
+      await manager.importOverrides('{"page_size": 3}');
+      expect(manager.isOverridden(newCheckout), isFalse);
+      expect(manager.valueOf(pageSize), 3);
+    });
+
+    test('an empty object clears every override', () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      await manager.setOverride(newCheckout, true);
+
+      final FlagImportResult result = await manager.importOverrides('{}');
+      expect(result.applied, 0);
+      expect(manager.hasOverrides, isFalse);
+    });
+
+    test('normalises loose encodings on the way in', () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      await manager.importOverrides('{"new_checkout": "true", "page_size": 9}');
+
+      expect(manager.valueOf(newCheckout), isTrue);
+      expect(manager.rawOverrideOf(newCheckout), isTrue,
+          reason: 'the string should have been parsed before storing');
+      expect(jsonDecode(manager.exportOverrides()),
+          <String, Object>{'new_checkout': true, 'page_size': 9});
+    });
+
+    test('skips unknown keys and unparseable values, applying the rest',
+        () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      final FlagImportResult result = await manager.importOverrides('''
+        {
+          "new_checkout": true,
+          "retired_flag": 1,
+          "page_size": "lots",
+          "theme": "sepia"
+        }
+      ''');
+
+      expect(result.applied, 1);
+      expect(result.unknownKeys, <String>['retired_flag']);
+      expect(result.rejectedKeys, <String>['page_size', 'theme'],
+          reason: '"sepia" is outside the declared options');
+      expect(result.hasProblems, isTrue);
+      expect(manager.valueOf(newCheckout), isTrue);
+      expect(manager.valueOf(pageSize), 20);
+    });
+
+    test('persists the imported set', () async {
+      final MemoryFlagOverrideStore store = MemoryFlagOverrideStore();
+      final FlagManager manager =
+          FlagManager(flags: allFlags, store: store, enabled: true);
+      await manager.importOverrides('{"page_size": 4}');
+
+      expect(await store.load(), <String, Object>{'page_size': 4});
+    });
+
+    test('notifies listeners once', () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      int notifications = 0;
+      manager.addListener(() => notifications++);
+
+      await manager.importOverrides('{"page_size": 4}');
+      expect(notifications, 1);
+    });
+
+    test('rejects payloads that are not a JSON object', () async {
+      final FlagManager manager = FlagManager(flags: allFlags, enabled: true);
+      expect(() => manager.importOverrides('not json'),
+          throwsA(isA<FormatException>()));
+      expect(() => manager.importOverrides('[1, 2]'),
+          throwsA(isA<FormatException>()));
+    });
+
+    test('describe summarises what happened', () {
+      const FlagImportResult clean = FlagImportResult(
+        applied: 1,
+        unknownKeys: <String>[],
+        rejectedKeys: <String>[],
+      );
+      expect(clean.describe(), 'Imported 1 override');
+      expect(
+        const FlagImportResult(
+          applied: 2,
+          unknownKeys: <String>['a'],
+          rejectedKeys: <String>['b'],
+        ).describe(),
+        'Imported 2 overrides, 1 unknown, 1 rejected',
+      );
     });
   });
 

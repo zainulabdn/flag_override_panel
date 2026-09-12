@@ -401,6 +401,19 @@ void main() {
       await settleShooting();
       await hold();
 
+      // Show the clipboard round trip exists. Opening the menu is enough —
+      // actually copying raises a snack bar whose 4s timeout outlives the
+      // rest of the sequence and would sit over the finale.
+      await tester.tap(find.byKey(const Key('flag_override_panel.menu')));
+      await settleShooting();
+      await hold();
+      await hold();
+      // The menu's dismiss barrier belongs to the panel card's own Navigator,
+      // so it is clipped to the card — tapping the backdrop outside it does
+      // nothing. Tap empty space inside the card, below the menu.
+      await tester.tapAt(const Offset(600, 730));
+      await settleShooting();
+
       // One tap puts everything back.
       await tester.tap(find.byKey(const Key('flag_override_panel.reset_all')));
       await settleShooting();

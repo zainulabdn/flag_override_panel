@@ -149,8 +149,165 @@ class _PanelHeader extends StatelessWidget {
               label: const Text('Reset all'),
               onPressed: () => manager.clearAllOverrides(),
             ),
+          _ShareMenu(manager: manager),
         ],
       ),
+    );
+  }
+}
+
+enum _ShareAction { copy, paste }
+
+/// Moves the override set between devices.
+///
+/// The point is the round trip: a tester copies their overrides into a bug
+/// report, and whoever picks it up pastes them back to land on the same state.
+class _ShareMenu extends StatelessWidget {
+  const _ShareMenu({required this.manager});
+
+  final FlagManager manager;
+
+  Future<void> _copy(BuildContext context) async {
+    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(context);
+    final int count = manager.overrideCount;
+    await Clipboard.setData(ClipboardData(text: manager.exportOverrides()));
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text('Copied $count override${count == 1 ? '' : 's'}'),
+      ),
+    );
+  }
+
+  Future<void> _paste(BuildContext context) async {
+    // Captured before the first await: the menu item this ran from is gone by
+    // the time the dialog closes, so its context can no longer be looked up.
+    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(context);
+    final ClipboardData? clip = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!context.mounted) {
+      return;
+    }
+    final String? payload = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) =>
+          _ImportDialog(initialText: clip?.text ?? ''),
+    );
+    if (payload == null) {
+      return;
+    }
+    void report(String message) => messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+    try {
+      final FlagImportResult result = await manager.importOverrides(payload);
+      report(result.describe());
+    } on FormatException {
+      report('That is not a JSON object of flag keys.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ShareAction>(
+      key: const Key('flag_override_panel.menu'),
+      tooltip: 'Share overrides',
+      onSelected: (_ShareAction action) async {
+        switch (action) {
+          case _ShareAction.copy:
+            await _copy(context);
+          case _ShareAction.paste:
+            await _paste(context);
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<_ShareAction>>[
+        PopupMenuItem<_ShareAction>(
+          key: const Key('flag_override_panel.menu.copy'),
+          value: _ShareAction.copy,
+          enabled: manager.hasOverrides,
+          child: const ListTile(
+            leading: Icon(Icons.copy_all),
+            title: Text('Copy overrides'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<_ShareAction>(
+          key: Key('flag_override_panel.menu.paste'),
+          value: _ShareAction.paste,
+          child: ListTile(
+            leading: Icon(Icons.content_paste_go),
+            title: Text('Paste overrides'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Collects a pasted payload for [FlagManager.importOverrides].
+///
+/// Opens prefilled from the clipboard, so the common path — copy on one
+/// device, paste on another — is two taps.
+class _ImportDialog extends StatefulWidget {
+  const _ImportDialog({required this.initialText});
+
+  final String initialText;
+
+  @override
+  State<_ImportDialog> createState() => _ImportDialogState();
+}
+
+class _ImportDialogState extends State<_ImportDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialText);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Paste overrides'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'A JSON object of flag key to value. This replaces every '
+              'override currently set.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('flag_override_panel.import_field'),
+              controller: _controller,
+              minLines: 4,
+              maxLines: 8,
+              autofocus: true,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('flag_override_panel.import_confirm'),
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Import'),
+        ),
+      ],
     );
   }
 }

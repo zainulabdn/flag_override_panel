@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import 'flag.dart';
@@ -13,6 +15,53 @@ import 'flag_override_store.dart';
 /// source: (String key) => FirebaseRemoteConfig.instance.getValue(key).asString(),
 /// ```
 typedef FlagSource = Object? Function(String key);
+
+/// What [FlagManager.importOverrides] made of a payload.
+///
+/// An import never fails part-way: keys it cannot use are reported here and
+/// skipped, so a payload written against an older build of the app still
+/// applies everything it legitimately can.
+final class FlagImportResult {
+  /// Creates a result describing an import.
+  const FlagImportResult({
+    required this.applied,
+    required this.unknownKeys,
+    required this.rejectedKeys,
+  });
+
+  /// How many overrides were applied.
+  final int applied;
+
+  /// Keys in the payload that no registered flag declares.
+  ///
+  /// Usually a flag that has since been removed, or a typo.
+  final List<String> unknownKeys;
+
+  /// Keys of registered flags whose value did not parse to the flag's type.
+  ///
+  /// For example `"page_size": "lots"`, or a string outside a
+  /// [StringFlag.options] list.
+  final List<String> rejectedKeys;
+
+  /// Whether anything in the payload had to be skipped.
+  bool get hasProblems => unknownKeys.isNotEmpty || rejectedKeys.isNotEmpty;
+
+  /// A one-line summary suitable for a snack bar.
+  String describe() {
+    final StringBuffer buffer = StringBuffer()
+      ..write('Imported $applied override${applied == 1 ? '' : 's'}');
+    if (unknownKeys.isNotEmpty) {
+      buffer.write(', ${unknownKeys.length} unknown');
+    }
+    if (rejectedKeys.isNotEmpty) {
+      buffer.write(', ${rejectedKeys.length} rejected');
+    }
+    return buffer.toString();
+  }
+
+  @override
+  String toString() => 'FlagImportResult(${describe()})';
+}
 
 /// Resolves feature flag values and owns the local overrides shown by
 /// [FlagOverridePanel].
@@ -125,6 +174,9 @@ class FlagManager extends ChangeNotifier {
   /// Whether any override is currently set, regardless of [enabled].
   bool get hasOverrides => _overrides.isNotEmpty;
 
+  /// How many overrides are currently set, regardless of [enabled].
+  int get overrideCount => _overrides.length;
+
   /// The registered flags bucketed by [Flag.group], preserving the order in
   /// which groups and flags were declared.
   Map<String, List<Flag<Object>>> get groupedFlags {
@@ -201,8 +253,83 @@ class FlagManager extends ChangeNotifier {
 
   /// A snapshot of every flag's resolved value, keyed by [Flag.key].
   ///
-  /// Handy for attaching flag state to a bug report or a log line.
+  /// Handy for attaching flag state to a bug report or a log line. This is
+  /// every flag and the value actually in effect; [exportOverrides] is only
+  /// the flags someone deliberately changed.
   Map<String, Object> snapshot() => <String, Object>{
         for (final Flag<Object> flag in _flags) flag.key: valueOf(flag),
       };
+
+  /// Every override currently set, as indented JSON.
+  ///
+  /// The payload is a flat object of flag key to value — the same shape the
+  /// store persists — so it is readable enough to paste into a bug report and
+  /// round-trips through [importOverrides]:
+  ///
+  /// ```json
+  /// {
+  ///   "new_checkout": true,
+  ///   "page_size": 5
+  /// }
+  /// ```
+  ///
+  /// Flags left alone are absent rather than written out at their current
+  /// value, so importing this reproduces the overrides without pinning
+  /// everything else to whatever the exporting device happened to resolve.
+  String exportOverrides() =>
+      const JsonEncoder.withIndent('  ').convert(_overrides);
+
+  /// Replaces every override with the ones encoded in [json].
+  ///
+  /// This *replaces* rather than merges: after a successful import the only
+  /// overrides set are the ones in the payload, which is what reproducing
+  /// someone else's flag state means. An empty object therefore clears them.
+  ///
+  /// Entries are stored parsed, so loose encodings are normalised on the way
+  /// in — `"true"` for a [BoolFlag] lands as `true`. Keys that no flag
+  /// declares, and values that do not parse to their flag's type, are skipped
+  /// and reported in the [FlagImportResult] instead of failing the import.
+  ///
+  /// Throws a [FormatException] when [json] is not a JSON object.
+  Future<FlagImportResult> importOverrides(String json) async {
+    final Object? decoded = jsonDecode(json);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Expected a JSON object mapping flag keys to values.',
+      );
+    }
+
+    final Map<String, Flag<Object>> byKey = <String, Flag<Object>>{
+      for (final Flag<Object> flag in _flags) flag.key: flag,
+    };
+    final Map<String, Object> accepted = <String, Object>{};
+    final List<String> unknown = <String>[];
+    final List<String> rejected = <String>[];
+
+    for (final MapEntry<String, dynamic> entry in decoded.entries) {
+      final Flag<Object>? flag = byKey[entry.key];
+      if (flag == null) {
+        unknown.add(entry.key);
+        continue;
+      }
+      final Object? parsed = flag.parse(entry.value);
+      if (parsed == null) {
+        rejected.add(entry.key);
+        continue;
+      }
+      accepted[entry.key] = parsed;
+    }
+
+    _overrides
+      ..clear()
+      ..addAll(accepted);
+    notifyListeners();
+    await _store.save(_overrides);
+
+    return FlagImportResult(
+      applied: accepted.length,
+      unknownKeys: unknown,
+      rejectedKeys: rejected,
+    );
+  }
 }

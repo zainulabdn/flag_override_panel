@@ -1,3 +1,18 @@
+## 0.2.0
+
+- Overrides can be moved between devices. `FlagManager.exportOverrides()`
+  returns them as JSON and `importOverrides()` applies a payload back, so a
+  tester can paste their flag state into a bug report and whoever picks it up
+  can reproduce it exactly.
+- The panel gained a ⋮ menu wiring both to the clipboard. Paste opens
+  prefilled from the clipboard, so the round trip is two taps.
+- `importOverrides` replaces rather than merges, normalises loose encodings on
+  the way in, and skips keys it cannot use — reporting them in
+  `FlagImportResult` instead of failing the whole payload.
+- Added `FlagManager.overrideCount`.
+
+No breaking changes.
+
 ## 0.1.1
 
 - Add screenshots and an animated demo to the README and to pub.dev. They are
