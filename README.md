@@ -1,5 +1,8 @@
 # flag_override_panel
 
+[![pub package](https://img.shields.io/pub/v/flag_override_panel.svg)](https://pub.dev/packages/flag_override_panel)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A debug-only panel for viewing and overriding feature flags on-device, independent of whatever
 serves your flags in production.
 
